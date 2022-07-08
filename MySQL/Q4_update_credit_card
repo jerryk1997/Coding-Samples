@@ -1,0 +1,52 @@
+Insert into credit cards if not already existing 
+update credit cards if already existing this one must add trigger for credit card table then just update from date
+
+CREATE OR REPLACE PROCEDURE update_credit_card(cust_id INT, 
+credit_card_number BIGINT, 
+CVV INT, 
+credit_card_expiry_date DATE) 
+AS $$
+
+BEGIN
+
+INSERT INTO Credit_Cards (cust_id, credit_card_number, CVV, credit_card_expiry_date, from_date)
+VALUES (cust_id, credit_card_number, CVV, credit_card_expiry_date, CURRENT_DATE);
+
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION update_same_credit_card() 
+RETURNS TRIGGER
+AS $$
+DECLARE
+BEGIN 
+
+IF ROW(NEW.cust_id, NEW.credit_card_number, NEW.CVV, NEW.credit_card_expiry_date) IN (
+SELECT cust_id, credit_card_number, CVV, credit_card_expiry_date
+FROM Credit_cards
+WHERE cust_id = NEW.cust_id
+) THEN 
+UPDATE Credit_cards
+SET from_date = CURRENT_DATE
+WHERE 
+cust_id = NEW.cust_id AND
+credit_card_number = NEW.credit_card_number AND
+CVV = NEW.CVV AND
+credit_card_expiry_date = NEW.credit_card_expiry_date;
+RETURN NULL;
+END IF;
+
+RETURN NEW;
+
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER update_same_credit_card_trigger
+BEFORE INSERT ON Credit_cards
+FOR EACH ROW EXECUTE FUNCTION update_same_credit_card();
+
+inserts into credit card
+triggers check if the credit card already exists and updates the from date to make it active if it already exists
+if credit card that already exist is added by a different customer no insertion is done
+credit card is unique to customer 
+active credit cards are determined by from date only multiple active credit cards are possible if all activated on the same day 

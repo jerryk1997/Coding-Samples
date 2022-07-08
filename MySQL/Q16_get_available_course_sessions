@@ -1,0 +1,132 @@
+CREATE OR REPLACE FUNCTION get_available_course_sessions(course_id_IN INT, 
+launch_date_IN DATE) 
+RETURNS TABLE(session_date DATE, 
+session_start_hour TIME, 
+instructor_name TEXT, 
+num_remaining_seats INT) AS
+$$
+
+BEGIN
+RETURN QUERY
+WITH sessions_with_instructor_name AS (
+SELECT S.sid, S.start_time, S.end_time, S.s_date, S.rid, (SELECT get_num_remaining_seats(S.sid, launch_date_IN, course_id_IN, S.rid)) AS num_remaining_seats, E.e_name
+FROM Sessions S NATURAL JOIN Instructors I NATURAL JOIN Employees E
+WHERE S.course_id = course_id_IN 
+AND S.launch_date = launch_date_IN
+ORDER BY S.s_date ASC,
+S.start_time ASC)
+
+SELECT S.s_date AS session_date, S.start_time AS session_start_hour, S.e_name AS instructor_name, S.num_remaining_seats
+FROM sessions_with_instructor_name S
+WHERE S.num_remaining_seats > 0;
+END;
+
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION get_num_remaining_seats(sid INT, launch_date_IN DATE, course_id_IN INT, rid_IN INT)
+RETURNS INT AS
+$$
+DECLARE 
+total_registered INT;
+room_seating_cap INT;
+num_remaining_seats INT;
+
+BEGIN
+
+-- FIND NUMBER REGISTERED FOR THIS SESSION
+SELECT count(*) 
+INTO total_registered
+FROM Registers R WHERE R.registration_sid = sid AND R.launch_date = launch_date_IN AND R.course_id = course_id_IN;
+
+
+-- GET SEATING CAPACITY FOR THE ROOM OF THIS SESSION
+SELECT r_seating_capacity 
+INTO room_seating_cap
+FROM Rooms R WHERE R.rid = rid_IN;
+
+IF total_registered IS NULL THEN
+RETURN room_seating_cap;
+END IF;
+
+-- SEATING CAPACITY OF ROOM - NUM REGISTERED
+num_remaining_seats := room_seating_cap - total_registered;
+
+RETURN num_remaining_seats;
+
+END;
+$$ LANGUAGE plpgsql;
+
+make table of sessions with relevant instructor names and remaining seats of the session 
+remaining seats are calculated by counting the total numbered registered for the session and subtracting it from the rooms capacity
+
+select only the ones where teh remaining seats are more than 0 from the the table we made earlier
+
+
+
+
+
+select * from courses;
+select * from course_areas;
+select * from offerings;
+select * from sessions;
+select * from rooms;
+select * from registers;
+
+
+
+
+
+
+
+
+
+select * from employees;
+select * from administrators;
+select * from instructors;
+select * from full_time_instructors;
+select * from managers;
+
+
+
+CREATE ROOMS
+INSERT INTO ROOMS(rid, location, r_seating_capacity)
+VALUES (1, 'a', '20');
+
+INSERT INTO ROOMS(rid, location, r_seating_capacity)
+VALUES (2, 'b', '30');
+
+INSERT INTO ROOMS(rid, location, r_seating_capacity)
+VALUES (3, 'c', '40');
+
+INSERT INTO ROOMS(rid, location, r_seating_capacity)
+VALUES (4, 'd', '35');
+
+MAKE COURSE
+CALL add_course('cs2102', 'death to all', 'test', '3');
+
+ADD MANAGER FOR COURSE AREA OR ADMIN FOR OFFERING
+CALL add_employee('david', 'bishan street 24', 'david@whatsup.com', '91239444', 'full-time', 1000, '2021-03-03', 'manager', '{"test"}'); 
+CALL add_employee('nicholas', 'hougang', 'nicholas@whatsup.com', '82341234', 'full-time', 3000, '2021-06-11', 'administrator', NULL); 
+
+
+ADD INSTRUCTORS FOR SESSIONS 1 FULL TIME 1 PART TIME
+CALL add_employee('james', 'ang mo kio avenu 3', 'james@whatsup.com', '98883444', 'full-time', 500, '2021-09-09', 'instructor', '{"test"}'); 
+CALL add_employee('benny', '10 kent ridge drive', 'benny@whatsup.com', '81289304', 'part-time', 12, '2021-10-31', 'instructor', '{"test"}');
+CALL add_employee('danny', 'holland v avenue 1', 'danny@whatsup.com', '99992222', 'full-time', 800, '2021-02-23', 'instructor', '{"test"}'); 
+
+
+ADD OFFERING
+CALL add_course_offering(1, 200, '2021-05-30', '2021-05-25', 30, 3, '{"2021-06-07", "2021-06-08", "2021-06-10", "2021-06-15"}', '{"09:00:00", "14:00:00", "9:00:00", "15:00:00"}', '{1, 2, 1, 2}');
+
+
+select * from get_available_course_sessions(1, '2021-04-09');
+
+call register_session(1, 1, '2021-04-09', 1, 'credit_card');
+
+
+
+
+
+
+

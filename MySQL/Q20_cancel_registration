@@ -1,0 +1,157 @@
+CREATE OR REPLACE PROCEDURE cancel_registration(cust_id_IN INT, course_id_IN INT, launch_date_IN DATE) AS
+$$
+DECLARE
+
+registers_rec RECORD;
+redeems_rec RECORD;
+refund_amt NUMERIC(10, 2) := 0;
+package_credit INT := 0;
+cancels_date DATE := CURRENT_DATE;
+latest_cancel_date DATE;
+prv_remaining_redemptions INT;
+
+BEGIN
+-- find record for this registration
+SELECT *
+INTO registers_rec
+FROM Registers R
+WHERE R.credit_card_number IN (SELECT CC.credit_card_number FROM Credit_cards CC WHERE CC.cust_id = cust_id_IN)
+AND R.course_id = course_id_IN
+AND R.launch_date = launch_date_IN;
+
+-- find record for this registration if it was redeemed IF NULL MEANS BOUGHT NOT REDEEMED
+SELECT *
+INTO redeems_rec
+FROM Redeems R
+WHERE R.credit_card_number IN (SELECT CC.credit_card_number FROM Credit_cards CC WHERE CC.cust_id = cust_id_IN)
+AND R.course_id = course_id_IN
+AND R.launch_date = launch_date_IN;
+
+-- check for whether customer registered/redeemed for this course
+IF redeems_rec IS NULL AND registers_rec IS NULL THEN
+RAISE EXCEPTION 'Customer did not redeem or register for a session of this course';
+END IF;
+
+-- gets the latest date of cancellation before no refund
+latest_cancel_date := (SELECT get_session_date(registers_rec.registration_sid, launch_date_IN, course_id_IN)) - 7;
+
+-- delete record from registers to signify cancel
+DELETE FROM Registers R
+WHERE 
+R = registers_rec;
+
+-- if cancelled before latest cancel date
+IF cancels_date <= latest_cancel_date THEN
+-- if is redemption
+IF redeems_rec IS NOT NULL THEN
+package_credit := 1;--refund 1 package credit
+
+-- get current redemptions in buys record
+SELECT num_remaining_redemptions
+INTO prv_remaining_redemptions
+FROM Buys B
+WHERE B.package_id = redeems_rec.package_id
+AND B.buy_date = redeems_rec.buy_date
+AND B.credit_card_number = redeems_rec.credit_card_number;
+
+-- refund 1 redemption into appropriate buys
+UPDATE Buys B
+SET num_remaining_redemptions = prv_remaining_redemptions + 1
+WHERE B.package_id = redeems_rec.package_id
+AND B.buy_date = redeems_rec.buy_date
+AND B.credit_card_number = redeems_rec.credit_card_number;
+
+--delete the record of redemption
+DELETE FROM Redeems R
+WHERE 
+R = redeems_rec;
+ELSE 
+-- not redemption so refund amt is 90% of session fees
+refund_amt := 0.9 * (SELECT get_session_fees(registers_rec.launch_date, registers_rec.course_id));
+END IF;
+END IF;
+
+INSERT INTO Cancels(cancels_date,refund_amount,package_credit,sid,launch_date,course_id,cust_id)
+VALUES (cancels_date, refund_amt, package_credit, registers_rec.registration_sid, launch_date_IN, course_id_IN, cust_id_IN);
+
+END;
+$$ LANGUAGE plpgsql;
+
+finds corresponding register record and redeems record(if exist)
+deletes register record
+checks if cancelled within refund period
+	yes then check if redeem
+		yes then get the package from buys and add back a credit to remaining redemptions and delete record of redemption 
+		no then calculate refund amount 
+	no then nothing
+
+insert the record into cancels
+
+
+CREATE OR REPLACE FUNCTION get_session_date(sid_IN INT, launch_date_IN DATE, course_id_IN INT)
+RETURNS DATE AS
+$$
+DECLARE
+session_date DATE;
+
+BEGIN
+SELECT 
+s_date
+INTO
+session_date
+FROM 
+Sessions S
+WHERE
+S.sid = sid_IN AND S.launch_date = launch_date_IN AND S.course_id = course_id_IN;
+
+RETURN session_date;
+
+END;
+$$ LANGUAGE plpgsql;
+
+
+
+
+CREATE OR REPLACE FUNCTION get_session_fees(launch_date_IN DATE, course_id_IN INT)
+RETURNS NUMERIC(10, 2) AS
+$$
+DECLARE
+s_fees NUMERIC(10, 2);
+
+BEGIN
+SELECT 
+fees
+INTO 
+s_fees
+FROM 
+Offerings O
+WHERE
+O.launch_date = launch_date_IN AND O.course_id = course_id_IN;
+
+RETURN s_fees;
+
+END;
+$$ LANGUAGE plpgsql;
+
+call cancel_registration(1, 1, CURRENT_DATE);
+
+
+
+DELETE FROM Registers R
+	WHERE 
+		R.credit_card_number = registers_rec.credit_card_number AND
+		R.registration_date = registers_rec.registration_date AND
+		R.registration_sid = registers_rec.registration_sid AND 
+		R.launch_date = launch_date_INAND
+		R.course_id = course_id_IN;
+
+
+DELETE FROM Redeems R
+			WHERE 
+				R.redeem_date = redeems_rec.redeem_date AND 
+				R.buy_date = redeems_rec.buy_date AND 
+				R.package_id = redeems_rec.package_id AND 
+				R.credit_card_number = redeems_rec.credit_card_number AND 
+				R.sid = redeems_rec.sid AND
+				R.launch_date = redeems_rec.launch_date AND 
+				R.course_id = redeems_rec.course_id;

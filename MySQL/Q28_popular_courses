@@ -1,0 +1,101 @@
+CREATE OR REPLACE FUNCTION popular_courses()
+RETURNS TABLE(course_id INT, course_title TEXT, course_area TEXT, num_course_offering BIGINT, num_registrations_latest INT) AS
+$$
+
+BEGIN 
+RETURN QUERY
+SELECT 
+
+C.course_id AS course_id, 
+C.title AS course_title, 
+C.course_area_name AS course_area, 
+(SELECT count(*) FROM Offerings O WHERE O.course_id = C.course_id) AS num_course_offering, 
+(SELECT get_num_registrations(C.course_id, (SELECT get_latest_offering_date(C.course_id)))) AS num_registrations_latest
+
+FROM Courses C
+WHERE TRUE IN (SELECT is_popular_course(C.course_id))
+ORDER BY 
+num_registrations_latest DESC,
+course_id ASC;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION get_num_registrations(c_id INT, launch_date_IN DATE)
+RETURNS INT AS
+$$
+DECLARE 
+num INT;
+BEGIN
+SELECT 
+COUNT(*)
+INTO
+num
+FROM 
+Registers R
+WHERE 
+R.course_id = c_id AND
+R.launch_date = launch_date_IN;
+RETURN num;
+
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION get_latest_offering_date(c_id INT) 
+RETURNS DATE AS 
+$$
+DECLARE
+latest_date DATE;
+BEGIN
+SELECT 
+launch_date
+INTO
+latest_date
+FROM 
+Offerings O
+WHERE 
+O.course_id = c_id
+ORDER BY 
+launch_date DESC
+LIMIT 
+1;
+RETURN latest_date;
+
+END;
+$$ LANGUAGE plpgsql;
+
+
+call register_session(1, 1, '2021-01-02', 1, 'credit_card');
+call register_session(2, 1, '2021-01-02', 1, 'credit_card');
+call register_session(3, 1, '2021-01-02', 2, 'credit_card');
+call register_session(4, 1, '2021-01-02', 2, 'credit_card');
+call register_session(5, 1, '2021-01-02', 3, 'credit_card');
+call register_session(6, 1, '2021-01-02', 1, 'credit_card');
+call register_session(15, 1, '2021-01-02', 1, 'credit_card');
+call register_session(16, 1, '2021-01-02', 2, 'credit_card');
+call register_session(17, 1, '2021-01-02', 1, 'credit_card');
+
+
+
+
+call register_session(7, 1, '2021-04-10', 1, 'credit_card');
+call register_session(8, 1, '2021-04-10', 2, 'credit_card');
+call register_session(9, 1, '2021-04-10', 3, 'credit_card');
+call register_session(14, 1, '2021-04-10', 1, 'credit_card');
+call register_session(11, 1, '2021-04-10', 1, 'credit_card');
+call register_session(12, 1, '2021-04-10', 2, 'credit_card');
+call register_session(13, 1, '2021-04-10', 3, 'credit_card');
+
+
+
+
+
+
+
+
+register_session(
+IN customer_id INTEGER,
+IN crse_id INTEGER,
+IN lnch_date DATE,
+IN sid INTEGER,
+IN payment_method TEXT
+) 

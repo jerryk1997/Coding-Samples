@@ -1,0 +1,38 @@
+CREATE OR REPLACE FUNCTION find_rooms(session_date DATE, session_start_hour TIME, session_duration_integer INT)
+RETURNS TABLE (rid INT) AS 
+$$
+
+DECLARE 
+session_end_time TIME;
+session_duration INTERVAL := session_duration_integer * INTERVAL '1 hour';
+
+BEGIN
+session_end_time := session_start_hour + session_duration;
+RETURN QUERY
+SELECT R.rid 
+FROM Rooms R
+
+EXCEPT
+
+SELECT S.rid 
+FROM Sessions S
+WHERE 
+S.s_date = session_date AND-- on the same day
+((session_start_hour >= S.start_time AND session_start_hour < S.end_time) OR
+(session_end_time > S.start_time AND session_end_time <= S.end_time));
+
+END;
+$$ LANGUAGE plpgsql;
+
+SELECT R.rid 
+FROM Rooms R
+EXCEPT
+
+SELECT S.rid 
+FROM Sessions S
+WHERE S.s_date = DATE '2021-03-02' AND ((TIME '09:00:00' >= S.start_time AND TIME '09:00:00' < S.end_time) OR (TIME '11:00:00' > S.start_time AND TIME '11:00:00'  <= S.end_time));
+'2021-03-02', '09:00:00' 2
+select * from find_rooms('2021-03-09', '01:00', 2);
+
+
+select all rooms except rooms that are used by sessions on the same day with overlapping times

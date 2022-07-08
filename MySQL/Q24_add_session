@@ -1,0 +1,50 @@
+
+call add_session('2021-01-02', 1, 4, '2021-02-01', '10:00:00', 40, 1);
+call add_session('2021-01-02', 1, 5, '2021-04-01', '10:00:00', 36, 1);
+
+select find_rooms('2021-03-02', '09:00:00', 2)
+
+CREATE OR REPLACE PROCEDURE add_session(launch_date_IN DATE, course_id_IN INT, sid_IN INT, session_day DATE, session_start_hour TIME, eid_IN INT, rid_IN INT) AS
+$$
+DECLARE
+session_duration INTEGER;
+deadline DATE;
+session_end_hour TIME;
+
+
+BEGIN
+IF course_id_IN NOT IN (SELECT course_id FROM Courses) THEN
+RAISE EXCEPTION 'Invalid course ID';
+ELSIF launch_date_IN NOT IN (SELECT launch_date FROM Offerings O WHERE O.course_id = course_id_IN) THEN
+RAISE EXCEPTION 'Invalid launch date';
+END IF;
+
+SELECT duration 
+INTO session_duration
+FROM Courses C
+WHERE C.course_id = course_id_IN;
+
+session_end_hour := session_start_hour + (session_duration * INTERVAL '1 hour');
+
+SELECT registration_deadline
+INTO deadline
+FROM Offerings O
+WHERE O.launch_date =  launch_date_IN 
+AND O.course_id = course_id_IN;
+
+IF (rid_IN IN (SELECT * from find_rooms(session_day, session_start_hour, session_duration))) AND session_day < deadline THEN
+INSERT INTO Sessions(sid, course_id, launch_date, start_time, end_time, s_date, rid, eid)
+VALUES (sid_IN, course_id_IN, launch_date_IN, session_start_hour, session_end_hour, session_day, rid_IN, eid_IN);
+ELSE 
+RAISE NOTICE 'Unable to add due to lack of rooms';
+END IF;
+
+END;
+$$ LANGUAGE plpgsql;
+
+check if course id is valid or course launch date is valid
+find duration of the session from courses
+find registration deadline from offerings
+if room selected for session is available and session_day is after deadline then insert into sessions
+else raise notice do nothing
+
